@@ -1,0 +1,12 @@
+# Keep CodeRabbit installed but inactive in CodeQL-only evaluation repositories.
+# This file is identical on both sides of every test pull request and is not
+# part of the business patch under evaluation.
+
+reviews:
+  auto_review:
+    enabled: false
+    description_keyword: ""
+    labels: []
+    ignore_title_keywords:
+      - "CASE-"
+

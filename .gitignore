@@ -1,0 +1,22 @@
+target/
+.DS_Store
+nohup.out
+local/
+frontend/src/routes/test.svelte
+CaddyfileRemoteMalo
+*.swp
+**/.idea/
+.direnv
+/.vscode
+.dev-docker-wrapper*
+backend/.minio-data
+.aider*
+!.aiderignore
+rust-client/Cargo.toml
+
+# Symlinked cache directories (for git worktrees)
+backend/target
+frontend/node_modules
+typescript-client/node_modules
+frontend/.svelte-kit
+backend/chrome_profiler.json
