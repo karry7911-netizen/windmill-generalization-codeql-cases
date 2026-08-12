@@ -1,0 +1,455 @@
+diff --git a/backend/windmill-api/src/folders.rs b/backend/windmill-api/src/folders.rs
+index 5e4ba7db9..7cd824d64 100644
+--- a/backend/windmill-api/src/folders.rs
++++ b/backend/windmill-api/src/folders.rs
+@@ -130,6 +130,18 @@ async fn list_foldernames(
+     Ok(Json(rows))
+ }
+ 
++fn validate_owner(owner: &str) -> Result<()> {
++    if !owner
++        .chars()
++        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '/' || c == '-')
++    {
++        return Err(error::Error::BadRequest(
++            "Invalid owner: must contain only alphanumeric characters, underscores, hyphens, or slashes".to_string(),
++        ));
++    }
++    Ok(())
++}
++
+ async fn check_name_conflict<'c>(
+     tx: &mut Transaction<'c, Postgres>,
+     w_id: &str,
+@@ -202,7 +214,7 @@ async fn create_folder(
+         ));
+     }
+ 
+-    if let Err(e) = 
++    if let Err(e) =
+     sqlx::query_as!(
+         Folder,
+         "INSERT INTO folder (workspace_id, name, display_name, owners, extra_perms, summary, created_by, edited_at) VALUES ($1, $2, $3, $4, $5, $6, $7, now())",
+@@ -262,15 +274,8 @@ async fn create_folder(
+     )
+     .await?;
+ 
+-    log_folder_permission_change(
+-        &mut *tx,
+-        &w_id,
+-        &ng.name,
+-        &authed.username,
+-        "create",
+-        None,
+-    )
+-    .await?;
++    log_folder_permission_change(&mut *tx, &w_id, &ng.name, &authed.username, "create", None)
++        .await?;
+ 
+     tx.commit().await?;
+ 
+@@ -381,7 +386,8 @@ async fn update_folder(
+     if let Some(extra_perms) = ng.extra_perms {
+         if !extra_perms.is_object() {
+             return Err(windmill_common::error::Error::BadRequest(format!(
+-                "extra_perms must be an object, received {}", extra_perms.to_string()
++                "extra_perms must be an object, received {}",
++                extra_perms.to_string()
+             )));
+         }
+         sqlb.set(
+@@ -447,15 +453,8 @@ async fn update_folder(
+         .await?;
+     }
+     if extra_perms_changed {
+-        log_folder_permission_change(
+-            &mut *tx,
+-            &w_id,
+-            &name,
+-            &authed.username,
+-            "update_acl",
+-            None,
+-        )
+-        .await?;
++        log_folder_permission_change(&mut *tx, &w_id, &name, &authed.username, "update_acl", None)
++            .await?;
+     }
+ 
+     tx.commit().await?;
+@@ -695,6 +694,7 @@ async fn add_owner(
+     .fetch_optional(&mut *tx)
+     .await?;
+ 
++    validate_owner(&owner)?;
+     sqlx::query(&format!(
+         "UPDATE folder SET extra_perms = jsonb_set(extra_perms, '{{\"{owner}\"}}', to_jsonb($1), \
+          true) WHERE name = $2 AND workspace_id = $3 RETURNING extra_perms"
+@@ -747,6 +747,7 @@ async fn remove_owner(
+ 
+     not_found_if_none(get_folderopt(&mut tx, &w_id, &name).await?, "Folder", &name)?;
+     require_is_owner(&authed, &name)?;
++    validate_owner(&owner)?;
+ 
+     let folder = sqlx::query!(
+         "UPDATE folder SET owners = array_remove(owners, $1::varchar) WHERE name = $2 AND workspace_id = $3 AND $1 = ANY(owners) RETURNING name",
+@@ -758,7 +759,10 @@ async fn remove_owner(
+     .await?;
+ 
+     if folder.is_none() && write.is_none() {
+-        return Ok(format!("Owner {} is already not a member of folder {}", owner, name));
++        return Ok(format!(
++            "Owner {} is already not a member of folder {}",
++            owner, name
++        ));
+     }
+ 
+     if let Some(write) = write {
+@@ -775,11 +779,13 @@ async fn remove_owner(
+         .flatten();
+ 
+         if folder.is_none() && old_write.is_none_or(|ow| ow == write) {
+-            return Ok(format!("Owner {} is already not a member of folder {} and write permission was already {}", owner, name, write));
++            return Ok(format!(
++                "Owner {} is already not a member of folder {} and write permission was already {}",
++                owner, name, write
++            ));
+         }
+     }
+ 
+-
+     audit_log(
+         &mut *tx,
+         &authed,
+@@ -796,7 +802,15 @@ async fn remove_owner(
+         Some(false) => "grant_viewer_only",
+         None => "revoke_all",
+     };
+-    log_folder_permission_change(&mut *tx, &w_id, &name, &authed.username, change_type, Some(&owner)).await?;
++    log_folder_permission_change(
++        &mut *tx,
++        &w_id,
++        &name,
++        &authed.username,
++        change_type,
++        Some(&owner),
++    )
++    .await?;
+ 
+     tx.commit().await?;
+ 
+diff --git a/backend/windmill-api/src/jobs.rs b/backend/windmill-api/src/jobs.rs
+index c9950c3c8..434b9fceb 100644
+--- a/backend/windmill-api/src/jobs.rs
++++ b/backend/windmill-api/src/jobs.rs
+@@ -440,24 +440,24 @@ async fn get_flow_env_by_flow_job_id(
+ ) -> windmill_common::error::JsonResult<Box<JsonRawValue>> {
+     let flow_env = sqlx::query_scalar!(
+             r#"
+-                SELECT 
+-                    CASE 
++                SELECT
++                    CASE
+                         WHEN flow_version.id IS NOT NULL THEN
+                             (flow_version.value -> 'flow_env' -> $3) #> $4
+                         ELSE
+                             (root_job.raw_flow -> 'flow_env' -> $3) #> $4
+                     END AS "flow_env: sqlx::types::Json<Box<RawValue>>"
+-                FROM 
++                FROM
+                     v2_job current_job
+-                JOIN 
++                JOIN
+                     v2_job root_job ON root_job.id = COALESCE(current_job.root_job, current_job.flow_innermost_root_job, current_job.parent_job, current_job.id)
+                     AND root_job.workspace_id = current_job.workspace_id
+                 LEFT JOIN
+                     flow_version ON flow_version.id = root_job.runnable_id
+                     AND flow_version.path = root_job.runnable_path
+                     AND flow_version.workspace_id = root_job.workspace_id
+-            WHERE 
+-                    current_job.id = $1 AND 
++            WHERE
++                    current_job.id = $1 AND
+                     current_job.workspace_id = $2"#,
+             flow_job_id,
+             w_id,
+@@ -4341,12 +4341,12 @@ pub async fn run_flow_by_version_inner(
+ 
+     let flow_path = sqlx::query_scalar!(
+         r#"
+-            SELECT 
+-                path 
+-            FROM 
+-                flow_version 
+-            WHERE 
+-                id = $1 AND 
++            SELECT
++                path
++            FROM
++                flow_version
++            WHERE
++                id = $1 AND
+                 workspace_id = $2
+             "#,
+         version,
+@@ -4953,10 +4953,10 @@ pub async fn run_wait_result_internal(
+                         result AS \"result: sqlx::types::Json<Box<RawValue>>\",
+                         result_columns,
+                         status = 'success' AS \"success!\"
+-                    FROM 
++                    FROM
+                         v2_job_completed
+-                    WHERE 
+-                        id = $1 AND 
++                    WHERE
++                        id = $1 AND
+                         workspace_id = $2
+                     ",
+                 uuid,
+@@ -5960,12 +5960,12 @@ pub async fn run_wait_result_flow_by_version(
+ 
+     let flow_path = sqlx::query_scalar!(
+         r#"
+-                SELECT 
+-                    path 
+-                FROM 
+-                    flow_version 
+-                WHERE 
+-                    id = $1 AND 
++                SELECT
++                    path
++                FROM
++                    flow_version
++                WHERE
++                    id = $1 AND
+                     workspace_id = $2
+             "#,
+         version,
+@@ -6925,12 +6925,12 @@ async fn run_dynamic_select(
+                     None => {
+                         let dynamic_input = sqlx::query_scalar!(
+                             r#"
+-                            SELECT 
+-                                schema 
+-                            FROM 
+-                                flow 
+-                            WHERE 
+-                                workspace_id = $1 AND 
++                            SELECT
++                                schema
++                            FROM
++                                flow
++                            WHERE
++                                workspace_id = $1 AND
+                                 path = $2
+                         "#,
+                             &w_id,
+@@ -7235,6 +7235,9 @@ impl Hash for JobUpdate {
+ }
+ 
+ async fn get_log_file(Path((_w_id, file_p)): Path<(String, String)>) -> error::Result<Response> {
++    if file_p.contains("..") {
++        return Err(error::Error::BadRequest("Invalid path".to_string()));
++    }
+     let local_file = format!("{TMP_DIR}/logs/{file_p}");
+     if tokio::fs::metadata(&local_file).await.is_ok() {
+         let mut file = tokio::fs::File::open(local_file).await.map_err(to_anyhow)?;
+@@ -7647,9 +7650,9 @@ async fn get_flow_stream_delta(
+     if let Some(job_id) = flow_stream_job_id {
+         let record = sqlx::query!(
+             "
+-                SELECT 
+-                    string_agg(stream, '' order by idx asc) as stream, 
+-                    max(idx) + 1 as offset 
++                SELECT
++                    string_agg(stream, '' order by idx asc) as stream,
++                    max(idx) + 1 as offset
+                 FROM job_result_stream_v2
+                 WHERE job_id = $2 AND idx >= $1
+                 ",
+@@ -7710,15 +7713,15 @@ async fn get_job_update_data(
+                 let r = sqlx::query!(
+                     "
+                     WITH result_stream AS (
+-                        SELECT 
+-                            string_agg(stream, '' order by idx asc) as stream, 
+-                            job_id, 
+-                            max(idx) + 1 as offset 
++                        SELECT
++                            string_agg(stream, '' order by idx asc) as stream,
++                            job_id,
++                            max(idx) + 1 as offset
+                         FROM job_result_stream_v2
+                         WHERE job_id = $2 AND idx >= $3
+                         GROUP BY job_id
+                     )
+-                    SELECT 
++                    SELECT
+                         jc.result as \"result: sqlx::types::Json<Box<RawValue>>\",
+                         v2_job.tag,
+                         v2_job_queue.running as \"running: Option<bool>\",
+@@ -7760,10 +7763,10 @@ async fn get_job_update_data(
+                     let r = sqlx::query!(
+                         "
+                         WITH result_stream AS (
+-                            SELECT 
+-                                string_agg(stream, '' order by idx asc) as stream, 
+-                                job_id, 
+-                                max(idx) + 1 as offset 
++                            SELECT
++                                string_agg(stream, '' order by idx asc) as stream,
++                                job_id,
++                                max(idx) + 1 as offset
+                             FROM job_result_stream_v2
+                             WHERE job_id = $1 AND idx >= $3
+                             GROUP BY job_id
+@@ -7803,10 +7806,10 @@ async fn get_job_update_data(
+                     let q = sqlx::query!(
+                         "
+                         WITH result_stream AS (
+-                            SELECT 
+-                                string_agg(stream, '' order by idx asc) as stream, 
+-                                job_id, 
+-                                max(idx) + 1 as offset 
++                            SELECT
++                                string_agg(stream, '' order by idx asc) as stream,
++                                job_id,
++                                max(idx) + 1 as offset
+                             FROM job_result_stream_v2
+                             WHERE job_id = $2 AND idx >= $3
+                             GROUP BY job_id
+@@ -7874,10 +7877,10 @@ async fn get_job_update_data(
+         let mut record = sqlx::query!(
+                 "
+                 WITH result_stream AS (
+-                    SELECT 
+-                        string_agg(stream, '' order by idx asc) as stream, 
+-                        job_id, 
+-                        max(idx) + 1 as offset 
++                    SELECT
++                        string_agg(stream, '' order by idx asc) as stream,
++                        job_id,
++                        max(idx) + 1 as offset
+                     FROM job_result_stream_v2
+                     WHERE job_id = $3 AND idx >= $8
+                     GROUP BY job_id
+diff --git a/backend/windmill-api/src/resources.rs b/backend/windmill-api/src/resources.rs
+index 900d79a13..b7127a490 100644
+--- a/backend/windmill-api/src/resources.rs
++++ b/backend/windmill-api/src/resources.rs
+@@ -1469,6 +1469,55 @@ struct GitRepositoryResource {
+     branch: Option<String>,
+ }
+ 
++/// Validates a git URL to prevent git option injection attacks.
++/// Git URLs starting with '-' could be interpreted as command-line options.
++fn validate_git_url(url: &str) -> Result<()> {
++    let url = url.trim();
++    if url.is_empty() {
++        return Err(Error::BadRequest("Git URL cannot be empty".to_string()));
++    }
++    if url.starts_with('-') {
++        return Err(Error::BadRequest(
++            "Git URL cannot start with '-' (potential option injection)".to_string(),
++        ));
++    }
++    // Block other potentially dangerous patterns
++    if url.contains('\0') || url.contains('\n') || url.contains('\r') {
++        return Err(Error::BadRequest(
++            "Git URL contains invalid characters".to_string(),
++        ));
++    }
++    Ok(())
++}
++
++/// Validates a git branch/ref name to prevent injection attacks.
++fn validate_git_ref(ref_name: &str) -> Result<()> {
++    let ref_name = ref_name.trim();
++    if ref_name.is_empty() {
++        return Err(Error::BadRequest("Git ref cannot be empty".to_string()));
++    }
++    if ref_name.starts_with('-') {
++        return Err(Error::BadRequest(
++            "Git ref cannot start with '-' (potential option injection)".to_string(),
++        ));
++    }
++    // Git ref names have specific rules - block dangerous characters
++    if ref_name.contains('\0')
++        || ref_name.contains('\n')
++        || ref_name.contains('\r')
++        || ref_name.contains("..")
++        || ref_name.contains("@{")
++        || ref_name.ends_with('.')
++        || ref_name.ends_with('/')
++        || ref_name.contains("//")
++    {
++        return Err(Error::BadRequest(
++            "Git ref contains invalid characters or patterns".to_string(),
++        ));
++    }
++    Ok(())
++}
++
+ #[derive(Serialize)]
+ struct GitCommitHashResponse {
+     commit_hash: String,
+@@ -1629,7 +1678,8 @@ async fn get_repo_latest_commit_hash(
+     git_resource: &GitRepositoryResource,
+     git_ssh_command: Option<String>,
+ ) -> Result<String> {
+-    let mut git_cmd = Command::new("git");
++    // Validate URL and branch to prevent option injection attacks
++    validate_git_url(&git_resource.url)?;
+ 
+     let ref_spec = git_resource
+         .branch
+@@ -1637,6 +1687,12 @@ async fn get_repo_latest_commit_hash(
+         .filter(|s| !s.is_empty())
+         .unwrap_or("HEAD");
+ 
++    // Validate ref_spec if it's not the default HEAD
++    if ref_spec != "HEAD" {
++        validate_git_ref(ref_spec)?;
++    }
++
++    let mut git_cmd = Command::new("git");
+     git_cmd.args(["ls-remote", &git_resource.url, ref_spec]);
+     if let Some(git_ssh_command) = git_ssh_command {
+         git_cmd.env("GIT_SSH_COMMAND", git_ssh_command);
+diff --git a/backend/windmill-api/src/settings.rs b/backend/windmill-api/src/settings.rs
+index 54a9a08e6..939ae9fa5 100644
+--- a/backend/windmill-api/src/settings.rs
++++ b/backend/windmill-api/src/settings.rs
+@@ -709,11 +709,31 @@ async fn setup_custom_instance_pg_database_inner(
+     // Validate name to ensure it only contains alphanumeric characters
+     // Prevents SQL injection on the instance database
+     lazy_static::lazy_static! {
+-        static ref VALID_NAME: regex::Regex = regex::Regex::new(r"^[a-zA-Z0-9_]+$").unwrap();
++        // Must start with a letter, then alphanumeric/underscore
++        static ref VALID_NAME: regex::Regex = regex::Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*$").unwrap();
++    }
++    let dbname = dbname.trim();
++    if dbname.is_empty() {
++        return Err(error::Error::BadRequest(
++            "Database name cannot be empty".to_string(),
++        ));
++    }
++    // PostgreSQL identifier limit is 63 bytes
++    if dbname.len() > 63 {
++        return Err(error::Error::BadRequest(
++            "Database name cannot exceed 63 characters".to_string(),
++        ));
+     }
+     if !VALID_NAME.is_match(dbname) {
+         return Err(error::Error::BadRequest(
+-            "Catalog name must be alphanumeric, underscores allowed".to_string(),
++            "Database name must start with a letter and contain only alphanumeric characters or underscores".to_string(),
++        ));
++    }
++    // Additional check: block PostgreSQL reserved/special names
++    let lower = dbname.to_lowercase();
++    if lower == "template0" || lower == "template1" || lower == "postgres" {
++        return Err(error::Error::BadRequest(
++            "Cannot use reserved PostgreSQL database names".to_string(),
+         ));
+     }
+     if wmill_pg_creds.dbname.trim().eq_ignore_ascii_case(dbname.trim()) {
