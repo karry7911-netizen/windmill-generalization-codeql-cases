@@ -1,0 +1,5 @@
+target/
+.env
+oauth.json
+windmill-api/openapi-deref.yaml
+tracing.folded

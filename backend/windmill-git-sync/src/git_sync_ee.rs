@@ -1,0 +1,1 @@
+/git/windmill/../windmill-ee-private/windmill-git-sync/src/git_sync_ee.rs

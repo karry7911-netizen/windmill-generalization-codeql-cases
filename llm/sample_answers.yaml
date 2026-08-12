@@ -1,0 +1,733 @@
+- answer: |-
+    ```python
+    from typing import TypedDict, List
+    import psycopg2
+
+    # Define the TypedDict for the PostgreSQL resource
+    class postgresql(TypedDict):
+        host: str
+        port: int
+        user: str
+        dbname: str
+        sslmode: str
+        password: str
+
+    def main(postgres: postgresql) -> List[dict]:
+        # Connect to the PostgreSQL database
+        connection = psycopg2.connect(
+            host=postgres['host'],
+            port=postgres['port'],
+            user=postgres['user'],
+            dbname=postgres['dbname'],
+            password=postgres['password'],
+            sslmode=postgres['sslmode']
+        )
+
+        # Create a cursor object
+        cursor = connection.cursor()
+
+        # Execute the query to fetch all rows from the orders table
+        cursor.execute("SELECT * FROM orders")
+
+        # Fetch all rows from the cursor
+        rows = cursor.fetchall()
+
+        # Define the list to hold the rows as dictionaries
+        orders_list = []
+
+        # Get the column names
+        column_names = [desc[0] for desc in cursor.description]
+
+        # Convert each row to a dictionary with column names as keys
+        for row in rows:
+            order = dict(zip(column_names, row))
+            orders_list.append(order)
+
+        # Close the cursor and the connection
+        cursor.close()
+        connection.close()
+
+        # Return the list of orders
+        return orders_list
+    ```
+  description: connect to postgres and list the rows in the orders table
+  lang: python3
+  template_prompt: |-
+    <contextual_information>
+    You have to write a function in Python called "main". Specify the parameter types. Do not call the main function.
+    You can take as parameters resources which are dictionaries containing credentials or configuration information. For Windmill to correctly detect the resources to be passed, the resource type name has to be exactly as specified in the following list:
+    <resourceTypes>
+    {resourceTypes}
+    </resourceTypes>
+    You need to define the type of the resources that are needed before the main function, but only include them if they are actually needed to achieve the function purpose.
+    The resource type name has to be exactly as specified (has to be IN LOWERCASE). If the type name conflicts with any imported methods, you have to rename the imported method with the conflicting name.
+    <contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```python
+    def main(num: int) -> float:
+        if num == 0:  # Check if num is zero to avoid division by zero error
+            raise ValueError("Cannot divide by zero")
+        return 3 / num
+    ```
+    <explanation>
+    The error "division by zero" occurs when you attempt to divide a number by zero, which is mathematically undefined and not allowed in programming. To fix this error, I added a check at the beginning of the `main` function to ensure that the `num` parameter is not zero. If `num` is zero, the function raises a `ValueError` with an appropriate message. This prevents the division by zero from occurring and allows the user of the function to handle the exception appropriately.
+    </explanation>
+  code: |-
+    def main(num: int) -> float:
+      return 3 / num
+  error: division by zero
+  lang: python3
+  template_prompt: |-
+    Here's my python3 code:
+    ```python
+    {code}
+    ```
+    <contextual_information>
+    You have to write a function in python called "main". Specify the parameter types. Do not call the main function.
+    You can take as parameters resources which are dictionaries containing credentials or configuration information. For Windmill to correctly detect the resources to be passed, the resource type name has to be exactly as specified in the following list:
+    <resourceTypes>
+    {resourceTypes}
+    </resourceTypes>
+    You need to define the type of the resources that are needed before the main function, but only include them if they are actually needed to achieve the function purpose.
+    The resource type name has to be exactly as specified (has to be IN LOEWRCASE). If the type name conflicts with any imported methods, you have to rename the imported method with the conflicting name.
+    <contextual_information>
+    I get the following error: {error}
+    Fix my code.
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You fix the code shared by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Explain the error and the fix after generating the code inside an <explanation> tag.
+    Also put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+    <explanation>{explanation}</explanation>
+  type: fix
+- answer: |-
+    ```python
+    # Define the function 'main' which takes an integer 'num' and returns a float
+    def main(num: int) -> float:
+      # Divide the input number by 16 and return the result
+      return num / 16
+    ```
+  code: |-
+    def main(num: int) -> float:
+      return num / 16
+  description: comment my code
+  lang: python3
+  template_prompt: |-
+    Here's my python3 code:
+    ```python
+    {code}
+    ```
+    <contextual_information>
+    You have to write a function in python called "main". Specify the parameter types. Do not call the main function.
+    You can take as parameters resources which are dictionaries containing credentials or configuration information. For Windmill to correctly detect the resources to be passed, the resource type name has to be exactly as specified in the following list:
+    <resourceTypes>
+    {resourceTypes}
+    </resourceTypes>
+    You need to define the type of the resources that are needed before the main function, but only include them if they are actually needed to achieve the function purpose.
+    The resource type name has to be exactly as specified (has to be IN LOEWRCASE). If the type name conflicts with any imported methods, you have to rename the imported method with the conflicting name.
+    <contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You fix the code shared by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: edit
+- answer: |-
+    ```go
+    package inner
+
+    import (
+        "errors"
+    )
+
+    // main divides a given number by 16 and returns the result along with any error that might occur.
+    func main(number float64) (float64, error) {
+        if number == 0 {
+            return 0, errors.New("cannot divide by zero")
+        }
+        result := number / 16
+        return result, nil
+    }
+    ```
+  description: divide a number by 16
+  lang: go
+  template_prompt: |-
+    Here's my go code:
+    ```go
+    {code}
+    ```
+    <contextual_information>
+    You have to write go code and export a "main" function. Import the packages you need. The return type of the function has to be ({return_type}, error). The file package has to be "inner"
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```typescript
+    import { toWords } from "npm:number-to-words";
+
+    // Define the main function that converts a number to its word representation
+    export async function main(numberToConvert: number): Promise<string> {
+      // Convert the number to words using the number-to-words package
+      const words = toWords(numberToConvert);
+      return words;
+    }
+    ```
+  description: convert a number to a word
+  lang: deno
+  template_prompt: |-
+    <contextual_information>
+    You have to write TypeScript code and export a "main" function like this: "export async function main(...)" and specify the parameter types but do not call it.
+    You can import deno libraries or you can also import npm libraries like that: "import ... from "npm:{package}";". The fetch standard method is available globally.
+    You can take as parameters resources which are dictionaries containing credentials or configuration information. For Windmill to correctly detect the resources to be passed, the resource type name has to be exactly as specified in the following list:
+    <resourceTypes>
+    {resourceTypes}
+    </resourceTypes>
+    You need to define the type of the resources that are needed before the main function, but only include them if they are actually needed to achieve the function purpose.
+    The resource type name has to be exactly as specified (no resource suffix). If the type name conflicts with any imported methods, you have to rename the imported method with the conflicting name.
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```typescript
+    import { Client } from "npm:pg";
+
+    // Define the Postgresql resource type as specified
+    type Postgresql = {
+      host: string,
+      port: number,
+      user: string,
+      dbname: string,
+      sslmode: string,
+      password: string
+    };
+
+    export async function main(postgres: Postgresql) {
+      // Create a new client instance with the provided Postgresql resource
+      const client = new Client({
+        user: postgres.user,
+        host: postgres.host,
+        database: postgres.dbname,
+        password: postgres.password,
+        port: postgres.port,
+        ssl: postgres.sslmode === 'require' ? { rejectUnauthorized: false } : false,
+      });
+
+      try {
+        // Connect to the PostgreSQL server
+        await client.connect();
+
+        // Query the orders table and fetch all rows
+        const res = await client.query('SELECT * FROM orders');
+
+        // Log the rows to the console
+        console.log(res.rows);
+
+        // Return the rows
+        return res.rows;
+      } catch (error) {
+        // If there's an error, log it to the console
+        console.error('Error querying the PostgreSQL database:', error);
+        throw error;
+      } finally {
+        // Close the client connection
+        await client.end();
+      }
+    }
+    ```
+  description: connect to postgres and list the rows in the orders table
+  lang: deno
+  template_prompt: |-
+    <contextual_information>
+    You have to write TypeScript code and export a "main" function like this: "export async function main(...)" and specify the parameter types but do not call it.
+    You can import deno libraries or you can also import npm libraries like that: "import ... from "npm:{package}";". The fetch standard method is available globally.
+    You can take as parameters resources which are dictionaries containing credentials or configuration information. For Windmill to correctly detect the resources to be passed, the resource type name has to be exactly as specified in the following list:
+    <resourceTypes>
+    {resourceTypes}
+    </resourceTypes>
+    You need to define the type of the resources that are needed before the main function, but only include them if they are actually needed to achieve the function purpose.
+    The resource type name has to be exactly as specified (no resource suffix). If the type name conflicts with any imported methods, you have to rename the imported method with the conflicting name.
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```typescript
+    // Import the necessary module for number to words conversion.
+    // If there's a naming conflict with the "convert" function, it can be renamed during import.
+    import { toWords } from 'number-to-words';
+
+    // Define the main function that converts a number to its word representation.
+    export async function main(numberToConvert: number): Promise<string> {
+      // Convert the number to words using the imported function.
+      const words = toWords(numberToConvert);
+
+      // Return the word representation of the number.
+      return words;
+    }
+    ```
+  description: convert a number to a word
+  lang: bun
+  template_prompt: |-
+    <contextual_information>
+    You have to write TypeScript code and export a "main" function like this: "export async function main(...)" and specify the parameter types but do not call it.
+    The fetch standard method is available globally.
+    You can take as parameters resources which are dictionaries containing credentials or configuration information. For Windmill to correctly detect the resources to be passed, the resource type name has to be exactly as specified in the following list:
+    <resourceTypes>
+    {resourceTypes}
+    </resourceTypes>
+    You need to define the type of the resources that are needed before the main function, but only include them if they are actually needed to achieve the function purpose.
+    The resource type name has to be exactly as specified (no resource suffix). If the type name conflicts with any imported methods, you have to rename the imported method with the conflicting name.
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```sql
+    -- $1 email
+    -- $2 username
+    -- $3 workspace_id
+    -- $4 role (optional)
+    -- $5 is_admin (optional, default = false)
+    -- $6 operator (optional, default = false)
+    -- $7 disabled (optional, default = false)
+
+    INSERT INTO usr (email, username, workspace_id, role, is_admin, operator, disabled)
+    VALUES ($1::varchar, $2::varchar, $3::varchar, $4::varchar, $5::bool, $6::bool, $7::bool);
+    ```
+  description: insert an a new user
+  lang: postgresql
+  template_prompt: |-
+    <contextual_information>
+    You have to write a statement for PostgreSQL. Arguments can be obtained directly in the statement with `$1::{type}`, `$2::{type}`, etc... Name the parameters (without specifying the type) by adding comments before the statement like that: `-- $1 name1` or `-- $2 name = default` (one per row)
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```sql
+    -- ? email (VARCHAR)
+    -- ? name (VARCHAR)
+    INSERT INTO users (email, name) VALUES (?, ?);
+    ```
+  description: insert an email and a name in the users table
+  lang: mysql
+  template_prompt: |-
+    <contextual_information>
+    You have to write a statement for MySQL. Arguments can be obtained directly in the statement with ?. Name the parameters by adding comments before the statement like that: `-- ? name1 ({type})` or `-- ? name2 ({type}) = default` (one per row)
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```sql
+    -- @email (STRING)
+    -- @name (STRING)
+
+    INSERT INTO users (email, name)
+    VALUES (@email, @name);
+    ```
+  description: insert an email and a name in the users table
+  lang: bigquery
+  template_prompt: |-
+    <contextual_information>
+    You have to write a statement for BigQuery. You can define arguments by adding comments before the statement like that: `-- @name1 ({type})` or `-- @name2 ({type}) = default` (one per row). They can then be obtained directly in the statement with `@name1`, `@name2`, etc....
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```sql
+    -- ? email (VARCHAR)
+    -- ? name (VARCHAR)
+
+    INSERT INTO users (email, name) VALUES (?, ?);
+    ```
+  description: insert an email and a name in the users table
+  lang: snowflake
+  template_prompt: |-
+    <contextual_information>
+    You have to write a statement for Snowflake. Arguments can be obtained directly in the statement with ?. Name the parameters by adding comments before the statement like that: `-- ? name1 ({type})` or `-- ? name2 ({type}) = default` (one per row)
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```graphql
+    mutation CreateUser($email: String!, $name: String!) {
+      createUser(email: $email, name: $name) {
+        id
+        email
+        name
+      }
+    }
+    ```
+  description: create a new user with an email and a name
+  lang: graphql
+  template_prompt: |-
+    <contextual_information>
+    You have to write a query for GraphQL. Add the needed arguments as query parameters.
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```bash
+    var1="$1"
+    result=$((var1 / 16))
+    echo $result
+    ```
+  description: divide a number by 16
+  lang: bash
+  template_prompt: |-
+    <contextual_information>
+    You have to write bash code. Do not include "#!/bin/bash". Arguments are always string and can only be obtained with "var1="$1"", "var2="$2"", etc... You do not need to check if the arguments are present.
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```powershell
+    param($Number)
+    # Divide the input number by 16
+    $Result = $Number / 16
+
+    # Output the result
+    $Result
+    ```
+  description: divide a number by 16
+  lang: powershell
+  template_prompt: |-
+    <contextual_information>
+    You have to write Powershell code. Arguments can be obtained by calling the param function on the first line like that: `param($ParamName1, $ParamName2 = "default value", [{type}]$ParamName3, ...)`
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```dockerfile
+    # Use an official Python runtime as a parent image
+    FROM python:3.8-slim
+
+    # Set the working directory in the container
+    WORKDIR /usr/src/app
+
+    # Copy the current directory contents into the container at /usr/src/app
+    COPY . .
+
+    # Install any needed packages specified in requirements.txt
+    RUN pip install --no-cache-dir -r requirements.txt
+
+    # Make port 80 available to the world outside this container
+    EXPOSE 80
+
+    # Define environment variable
+    ENV NAME World
+
+    # Run app.py when the container launches
+    CMD ["python", "./app.py"]
+    ```
+  description: write a docker image for a python app
+  lang: bash
+  template_prompt: |-
+    <contextual_information>
+    You have to write bash code. Do not include "#!/bin/bash". Arguments are always string and can only be obtained with "var1="$1"", "var2="$2"", etc... You do not need to check if the arguments are present.
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```typescript
+    type Github = {
+      token: string
+    };
+
+    export async function main(github: Github, owner: string, repo: string): Promise<number> {
+      // Define the GitHub API URL for fetching repository details
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
+
+      // Make a GET request to the GitHub API to retrieve repository details
+      const response = await fetch(apiUrl, {
+        headers: {
+          // Include the token in the Authorization header for authentication
+          Authorization: `token ${github.token}`
+        }
+      });
+
+      // Parse the JSON response
+      const repository = await response.json();
+
+      // Check if the response has a 'stargazers_count' property
+      if (response.ok && 'stargazers_count' in repository) {
+        // Return the number of stars
+        return repository.stargazers_count;
+      } else {
+        // If the property is not found or the response is not OK, throw an error
+        throw new Error('Failed to retrieve the number of stars for the repository.');
+      }
+    }
+    ```
+  description: query the github api and return the number of stars of a repo
+  lang: nativets
+  template_prompt: |-
+    <contextual_information>
+    You have to write TypeScript code and export a "main" function like this: "export async function main(...)" and specify the parameter types but do not call it.
+    You should use fetch and are not allowed to import any libraries.
+    You can take as parameters resources which are dictionaries containing credentials or configuration information. For Windmill to correctly detect the resources to be passed, the resource type name has to be exactly as specified in the following list:
+    <resourceTypes>
+    {resourceTypes}
+    </resourceTypes>
+    You need to define the type of the resources that are needed before the main function, but only include them if they are actually needed to achieve the function purpose.
+    The resource type name has to be exactly as specified (no resource suffix).
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```javascript
+    // Access the email from the context object
+    const email = ctx.email;
+
+    // Set the value of the input with id 'my_field' to the email from the context
+    setValue('my_field', email);
+    ```
+  description: set the value of the input with id 'my_field' to the context variable
+    email
+  lang: frontend
+  template_prompt: |-
+    Write client-side javascript code that should {description}. You have access to a few helpers:
+    You can access the context object with the ctx global variable.
+    The app state is a store that can be used to store data. You can access and update the state object with the state global variable like this: state.foo = 'bar'
+    You can use the goto function to navigate to a specific URL: goto(path: string, newTab?: boolean)
+    Use the setTab function to manually set the tab of a Tab component: setTab(id: string, index: string)
+    Use the recompute function to recompute a component: recompute(id: string)
+    Use the getAgGrid function to get the ag-grid instance of a table: getAgGrid(id: string)
+    The setValue function is meant to set or force the value of a component: setValue(id: string, value: any).
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```sql
+    -- $1 username
+
+    SELECT
+      EXTRACT(YEAR FROM completed_at) AS year,
+      EXTRACT(MONTH FROM completed_at) AS month,
+      COUNT(*) / COUNT(DISTINCT DATE_TRUNC('month', completed_at)) AS avg_completed_jobs_per_month
+    FROM
+      completed_job
+    WHERE
+      created_by = $1::varchar
+    GROUP BY
+      year,
+      month
+    ORDER BY
+      year,
+      month;
+    ```
+  description: compute the average number of completed jobs per month for the given
+    username
+  lang: postgresql
+  template_prompt: |-
+    <contextual_information>
+    You have to write a statement for PostgreSQL. Arguments can be obtained directly in the statement with `$1::{type}`, `$2::{type}`, etc... Name the parameters (without specifying the type) by adding comments before the statement like that: `-- $1 name1` or `-- $2 name = default` (one per row)
+    </contextual_information>
+    My instructions: {description}
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You write code as instructed by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+  type: gen
+- answer: |-
+    ```sql
+    -- $1 is_public
+    SELECT is_public FROM variable
+    ```
+    <explanation>
+    The error "ExecutionError: db error: ERROR: column "is_secret" does not exist" indicates that there is no column named "is_secret" in the table being queried. According to the provided database schema, the "is_secret" column does not exist in the "account" table or any other table except for the "variable" table.
+
+    The corrected code selects the "is_public" column from the "variable" table, which is the closest match to the original intent of querying a boolean column related to secret/public status. If the intention was indeed to select "is_secret", the correct table to select from would be "variable", not "account".
+    </explanation>
+  code: |-
+    SELECT is_secret FROM account
+  error: 'ExecutionError: db error: ERROR: column "is_secret" does not exist'
+  lang: postgresql
+  template_prompt: |-
+    Here's my PostgreSQL code:
+    ```sql
+    {code}
+    ```
+    <contextual_information>
+    Arguments can be obtained directly in the statement with `$1::{type}`, `$2::{type}`, etc... Name the parameters (without specifying the type) by adding comments before the statement like that: `-- $1 name1` or `-- $2 name = default` (one per row)
+    </contextual_information>
+    I get the following error: {error}
+    Fix my code.
+  template_system: |-
+    You are a helpful coding assistant for Windmill, a developer platform for running scripts. You fix the code shared by the user. Each user message includes some contextual information which should guide your answer.
+    Only output code. Wrap the code in a code block.
+    Explain the error and the fix after generating the code inside an <explanation> tag.
+    Also put explanations directly in the code as comments.
+
+    Here's how interactions have to look like:
+    user: {sample_question}
+    assistant: ```language
+    {code}
+    ```
+    <explanation>{explanation}</explanation>
+  type: fix

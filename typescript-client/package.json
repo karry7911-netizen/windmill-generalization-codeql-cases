@@ -1,0 +1,19 @@
+{
+  "name": "windmill-client",
+  "description": "Windmill SDK client for browsers and Node.js",
+  "version": "1.275.6",
+  "author": "Ruben Fiszel",
+  "license": "Apache 2.0",
+  "devDependencies": {
+    "@types/node": "^20.4.10"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "prepublish": "tsc",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ]
+}
