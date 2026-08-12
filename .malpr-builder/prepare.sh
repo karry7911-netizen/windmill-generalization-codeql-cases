@@ -4,7 +4,6 @@ set -euo pipefail
 workspace="${GITHUB_WORKSPACE:?}"
 metadata="$workspace/.malpr-builder/cases.tsv"
 source_repo="$(<"$workspace/.malpr-builder/source_repo.txt")"
-codeql_workflow="$workspace/.malpr-builder/codeql.yml"
 coderabbit_disable="$workspace/.malpr-builder/disable-coderabbit.yaml"
 cache="$(mktemp -d)"
 worktree_parent="$(mktemp -d)"
@@ -18,10 +17,9 @@ trap cleanup EXIT
 git init --bare -q "$cache"
 git -C "$cache" remote add upstream "https://github.com/$source_repo.git"
 git -C "$cache" remote add target "https://github.com/$GITHUB_REPOSITORY.git"
-gh auth setup-git
-
-git config --global user.name "MalPR Eval"
-git config --global user.email "malpr-eval@example.invalid"
+owner_id="$(gh api "users/$GITHUB_REPOSITORY_OWNER" --jq .id)"
+git -C "$cache" config user.name "$GITHUB_REPOSITORY_OWNER"
+git -C "$cache" config user.email "$owner_id+$GITHUB_REPOSITORY_OWNER@users.noreply.github.com"
 : >"$results"
 
 while IFS=$'\t' read -r public_case_id case_id base_ref diff_file; do
@@ -48,8 +46,6 @@ while IFS=$'\t' read -r public_case_id case_id base_ref diff_file; do
 
   rm -rf -- "$worktree/.github/workflows"
   rm -f -- "$worktree/.coderabbit.yaml"
-  mkdir -p "$worktree/.github/workflows"
-  cp -- "$codeql_workflow" "$worktree/.github/workflows/codeql.yml"
   cp -- "$coderabbit_disable" "$worktree/.coderabbit.yaml"
   git -C "$worktree" add -A
 
