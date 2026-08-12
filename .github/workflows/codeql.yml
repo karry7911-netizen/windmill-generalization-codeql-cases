@@ -1,0 +1,31 @@
+name: CodeQL security-extended
+
+on:
+  pull_request:
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (rust)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@d1ba80a13dd99fba24a470575428917156a28b43
+        with:
+          languages: rust
+          build-mode: none
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@d1ba80a13dd99fba24a470575428917156a28b43
+        with:
+          category: /language:rust
