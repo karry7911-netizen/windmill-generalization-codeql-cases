@@ -1,0 +1,8 @@
+target/
+.DS_Store
+nohup.out
+local/
+frontend/src/routes/test.svelte
+CaddyfileRemoteMalo
+*.swp
+**/.idea/

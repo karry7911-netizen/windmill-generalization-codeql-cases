@@ -1,0 +1,693 @@
+<script lang="ts">
+	import type {
+		AppEditorContext,
+		AppViewerContext,
+		ComponentCustomCSS,
+		OneOfConfiguration,
+		RichConfigurations
+	} from '../../../types'
+	import { components, type TableAction } from '$lib/components/apps/editor/component'
+	import ResolveConfig from '../../helpers/ResolveConfig.svelte'
+	import { findGridItem, initConfig, initOutput } from '$lib/components/apps/editor/appUtils'
+	import {
+		getDbSchemas,
+		loadTableMetaData,
+		type TableMetadata,
+		getPrimaryKeys,
+		type ColumnDef,
+		type DbType,
+		getTablesByResource
+	} from './utils'
+	import { getContext, tick } from 'svelte'
+	import UpdateCell from './UpdateCell.svelte'
+	import { workspaceStore, type DBSchemas } from '$lib/stores'
+	import Button from '$lib/components/common/button/Button.svelte'
+	import { Plus } from 'lucide-svelte'
+	import { Drawer, DrawerContent } from '$lib/components/common'
+	import InsertRow from './InsertRow.svelte'
+	import Portal from 'svelte-portal'
+	import { sendUserToast } from '$lib/toast'
+	import type { AppInput, StaticInput } from '$lib/components/apps/inputType'
+	import DbExplorerCount from './DbExplorerCount.svelte'
+	import AppAggridExplorerTable from '../table/AppAggridExplorerTable.svelte'
+	import type { IDatasource } from 'ag-grid-community'
+	import { RunnableWrapper } from '../../helpers'
+	import type RunnableComponent from '../../helpers/RunnableComponent.svelte'
+	import InsertRowRunnable from './InsertRowRunnable.svelte'
+	import DeleteRow from './DeleteRow.svelte'
+	import InitializeComponent from '../../helpers/InitializeComponent.svelte'
+	import { getSelectInput } from './queries/select'
+	import DebouncedInput from '../../helpers/DebouncedInput.svelte'
+	import { CancelablePromise } from '$lib/gen'
+	import RefreshButton from '$lib/components/apps/components/helpers/RefreshButton.svelte'
+
+	export let id: string
+	export let configuration: RichConfigurations
+	export let customCss: ComponentCustomCSS<'dbexplorercomponent'> | undefined = undefined
+	export let render: boolean
+	export let initializing: boolean = true
+	export let actions: TableAction[] = []
+
+	$: table = resolvedConfig.type.configuration?.[resolvedConfig.type?.selected]?.table as
+		| string
+		| undefined
+
+	$: table !== null && render && clearColumns()
+
+	function clearColumns() {
+		// We only want to clear the columns if the table has changed
+		if (!(lastTable && table && lastTable !== table) && !(lastTable && !table)) {
+			return
+		}
+
+		if (lastTable && !table) {
+			lastTable = undefined
+		}
+
+		const gridItem = findGridItem($app, id)
+
+		if (!gridItem) {
+			return
+		}
+
+		// @ts-ignore
+		gridItem.data.configuration.columnDefs = { value: [], type: 'static', loading: false }
+
+		$app = {
+			...$app
+		}
+	}
+
+	const resolvedConfig = initConfig(
+		components['dbexplorercomponent'].initialData.configuration,
+		configuration
+	)
+
+	$: resolvedConfig.type.selected &&
+		render &&
+		computeInput(
+			resolvedConfig.columnDefs,
+			resolvedConfig.whereClause,
+			resolvedConfig.type.configuration[resolvedConfig.type.selected].resource
+		)
+
+	let timeoutInput: NodeJS.Timeout | undefined = undefined
+
+	function computeInput(columnDefs: any, whereClause: string | undefined, resource: any) {
+		if (timeoutInput) {
+			clearTimeout(timeoutInput)
+		}
+		timeoutInput = setTimeout(() => {
+			timeoutInput = undefined
+			console.log('compute input')
+
+			input = getSelectInput(
+				resource,
+				resolvedConfig.type.configuration[resolvedConfig.type.selected].table,
+				columnDefs,
+				whereClause,
+				resolvedConfig.type.selected as DbType
+			)
+		}, 1000)
+	}
+
+	const { app, worldStore, mode, selectedComponent } =
+		getContext<AppViewerContext>('AppViewerContext')
+	const editorContext = getContext<AppEditorContext>('AppEditorContext')
+
+	let input: AppInput | undefined = undefined
+	let quicksearch = ''
+	let aggrid: AppAggridExplorerTable
+
+	$: editorContext != undefined && $mode == 'dnd' && resolvedConfig.type && listTables()
+
+	$: editorContext != undefined &&
+		$mode == 'dnd' &&
+		resolvedConfig.type.configuration?.[resolvedConfig?.type?.selected]?.table &&
+		listColumnsIfAvailable()
+
+	let firstQuicksearch = true
+	$: if (quicksearch !== undefined) {
+		if (firstQuicksearch) {
+			firstQuicksearch = false
+		} else {
+			aggrid?.clearRows()
+		}
+	}
+
+	initializing = false
+
+	let updateCell: UpdateCell
+
+	let renderCount = 0
+	let insertDrawer: Drawer | undefined = undefined
+	let componentContainerHeight: number | undefined = undefined
+	let buttonContainerHeight: number | undefined = undefined
+
+	function onUpdate(
+		e: CustomEvent<{
+			row: number
+			columnDef: ColumnDef
+			column: string
+			value: any
+			data: any
+			oldValue: string | undefined
+		}>
+	) {
+		const { columnDef, value, data, oldValue } = e.detail
+
+		updateCell?.triggerUpdate(
+			resolvedConfig.type.configuration[resolvedConfig.type.selected].resource,
+			resolvedConfig.type.configuration[resolvedConfig.type.selected].table ?? 'unknown',
+			columnDef,
+			resolvedConfig.columnDefs,
+			value,
+			data,
+			oldValue,
+			resolvedConfig.type.selected as DbType
+		)
+	}
+
+	let args: Record<string, any> = {}
+
+	let outputs = initOutput($worldStore, id, {
+		selectedRowIndex: 0,
+		selectedRow: {},
+		selectedRows: [] as any[],
+		result: [] as any[],
+		inputs: {},
+		loading: false,
+		page: 0,
+		newChange: { row: 0, column: '', value: undefined },
+		ready: undefined as boolean | undefined
+	})
+
+	let lastResource: string | undefined = undefined
+
+	function updateOneOfConfiguration<T, U extends string, V>(
+		oneOfConfiguration: OneOfConfiguration,
+		resolvedConfig: {
+			configuration: Record<U, V>
+			selected: U
+		},
+		patch: Partial<Record<keyof V, any>>
+	) {
+		const selectedConfig = oneOfConfiguration.configuration[resolvedConfig.selected]
+		if (!selectedConfig) {
+			console.warn(`Selected configuration '${resolvedConfig.selected}' does not exist.`)
+			return
+		}
+		Object.keys(patch).forEach((key) => {
+			oneOfConfiguration.configuration[resolvedConfig.selected][key] = {
+				...oneOfConfiguration.configuration[resolvedConfig.selected][key],
+				...patch[key]
+			}
+		})
+	}
+
+	async function listTables() {
+		let resource = resolvedConfig.type.configuration?.[resolvedConfig.type.selected]?.resource
+
+		if (!resource) return
+
+		if (lastResource === resource) return
+		lastResource = resource
+		const gridItem = findGridItem($app, id)
+
+		if (!gridItem) {
+			return
+		}
+
+		updateOneOfConfiguration(
+			gridItem.data.configuration.type as OneOfConfiguration,
+			resolvedConfig.type,
+			{
+				table: {
+					selectOptions: [],
+					loading: true
+				}
+			}
+		)
+
+		if (!resolvedConfig.type?.configuration?.[resolvedConfig.type.selected]?.resource) {
+			$app = {
+				...$app
+			}
+			return
+		}
+
+		try {
+			const dbSchemas: DBSchemas = {}
+
+			await getDbSchemas(
+				resolvedConfig?.type?.selected,
+				resolvedConfig.type.configuration[resolvedConfig?.type?.selected].resource.split(':')[1],
+				$workspaceStore,
+				dbSchemas,
+				(message: string) => {}
+			)
+
+			updateOneOfConfiguration(
+				gridItem.data.configuration.type as OneOfConfiguration,
+				resolvedConfig.type,
+				{
+					table: {
+						selectOptions: dbSchemas
+							? await getTablesByResource(
+									dbSchemas,
+									resolvedConfig?.type?.selected,
+									resource.split(':')[1],
+									$workspaceStore!
+							  )
+							: [],
+						loading: false
+					}
+				}
+			)
+
+			$app = {
+				...$app
+			}
+		} catch (e) {}
+	}
+
+	let datasource: IDatasource = {
+		rowCount: 0,
+		getRows: async function (params) {
+			const currentParams = {
+				offset: params.startRow,
+				limit: params.endRow - params.startRow,
+				quicksearch,
+				order_by: params.sortModel?.[0]?.colId ?? resolvedConfig.columnDefs?.[0]?.field,
+				is_desc: params.sortModel?.[0]?.sort === 'desc'
+			}
+
+			if (!render) {
+				return
+			}
+
+			runnableComponent?.runComponent(undefined, undefined, undefined, currentParams, {
+				done: (items) => {
+					let lastRow = -1
+
+					if (datasource?.rowCount && datasource.rowCount <= params.endRow) {
+						lastRow = datasource.rowCount
+					}
+
+					if (items && Array.isArray(items)) {
+						// MsSql response have an outer array, we need to flatten it
+						if (resolvedConfig.type.selected === 'ms_sql_server') {
+							items = items?.[0]
+						}
+
+						let processedData = items.map((item) => {
+							let primaryKeys = getPrimaryKeys(resolvedConfig.columnDefs)
+							let o = {}
+							primaryKeys.forEach((pk) => {
+								o[pk] = item[pk]
+							})
+							item['__index'] = JSON.stringify(o)
+							return item
+						})
+
+						if (items.length < params.endRow - params.startRow) {
+							lastRow = params.startRow + items.length
+						}
+
+						params.successCallback(processedData, lastRow)
+					} else {
+						params.failCallback()
+					}
+				},
+				cancel: () => {
+					params.failCallback()
+				},
+				error: () => {
+					params.failCallback()
+				}
+			})
+		}
+	}
+
+	let lastTable: string | undefined = undefined
+	let timeout: NodeJS.Timeout | undefined = undefined
+
+	function isSubset(subset: Record<string, any>, superset: Record<string, any>) {
+		return Object.keys(subset).every((key) => {
+			return superset[key] === subset[key]
+		})
+	}
+
+	function shouldReturnEarly(subset: Record<string, any>, superset: Record<string, any>): boolean {
+		const subsetKeys = Object.keys(subset)
+		const supersetKeys = Object.keys(superset)
+
+		if (supersetKeys.length === 0) return false
+
+		if (subsetKeys.length !== supersetKeys.length) {
+			return false
+		}
+
+		if (
+			JSON.stringify(supersetKeys.sort()) === JSON.stringify(subsetKeys.sort()) &&
+			!subsetKeys.every((key) => isSubset(subset[key], superset[key]))
+		) {
+			return false
+		}
+
+		return true
+	}
+
+	async function listColumnsIfAvailable() {
+		const selected = resolvedConfig.type.selected
+		let table = resolvedConfig.type.configuration?.[resolvedConfig.type.selected]?.table
+
+		if (lastTable === table) return
+
+		lastTable = table
+
+		const gridItem = findGridItem($app, id)
+		if (!gridItem) return
+
+		let columnDefs = gridItem.data.configuration.columnDefs as StaticInput<TableMetadata>
+
+		if (columnDefs.type !== 'static') return
+
+		//@ts-ignore
+		gridItem.data.configuration.columnDefs.loading = true
+		gridItem.data = gridItem.data
+		$app = $app
+
+		let tableMetadata = await loadTableMetaData(
+			resolvedConfig.type.configuration[selected].resource,
+			$workspaceStore,
+			resolvedConfig.type.configuration[selected].table,
+			selected
+		)
+
+		if (!tableMetadata) return
+
+		let old: TableMetadata = (columnDefs?.value as TableMetadata) ?? []
+		if (!Array.isArray(old)) {
+			console.log('old is not an array RESET')
+			old = []
+		}
+
+		const oldMap = Object.fromEntries(old.filter((x) => x != undefined).map((x) => [x.field, x]))
+		const newMap = Object.fromEntries(tableMetadata?.map((x) => [x.field, x]) ?? [])
+
+		if (shouldReturnEarly(newMap, oldMap)) {
+			//@ts-ignore
+			gridItem.data.configuration.columnDefs.loading = false
+			gridItem.data = gridItem.data
+
+			$app = $app
+			return
+		}
+
+		let ncols: any[] = []
+		Object.entries(oldMap).forEach(([key, value]) => {
+			if (newMap[key]) {
+				ncols.push({
+					...value,
+					...newMap[key]
+				})
+			}
+		})
+		Object.entries(newMap).forEach(([key, value]) => {
+			if (!oldMap[key]) {
+				ncols.push(value)
+			}
+		})
+
+		// Mysql capitalizes the column names, so we make sure to lowercase them
+		ncols = ncols.map((x) => {
+			let o = {}
+			Object.keys(x).forEach((k) => {
+				if (
+					[
+						'field',
+						'datatype',
+						'defaultvalue',
+						'isprimarykey',
+						'isidentity',
+						'isnullable',
+						'isenum'
+					].includes(k.toLocaleLowerCase())
+				) {
+					o[k.toLowerCase()] = x[k]
+				} else {
+					o[k] = x[k]
+				}
+			})
+			return o
+		})
+
+		state = undefined
+
+		//@ts-ignore
+		gridItem.data.configuration.columnDefs = { value: ncols, type: 'static', loading: false }
+		gridItem.data = gridItem.data
+
+		$app = $app
+		let oldS = $selectedComponent
+		$selectedComponent = []
+		await tick()
+		$selectedComponent = oldS
+
+		//@ts-ignore
+		resolvedConfig.columnDefs = ncols
+		timeout && clearTimeout(timeout)
+		timeout = setTimeout(() => {
+			timeout = undefined
+			renderCount += 1
+		}, 1500)
+	}
+
+	let isInsertable: boolean = false
+
+	$: $worldStore && render && connectToComponents()
+
+	function connectToComponents() {
+		if ($worldStore && datasource !== undefined) {
+			const outputs = $worldStore.outputsById[`${id}_count`]
+
+			if (outputs) {
+				outputs.result.subscribe(
+					{
+						id: 'dbexplorer-count-' + id,
+						next: (value) => {
+							if (value?.error) {
+								const message = value?.error?.message ?? value?.error
+								sendUserToast(message, true)
+								return
+							}
+
+							// MsSql response have an outer array, we need to flatten it
+							if (
+								Array.isArray(value) &&
+								value.length === 1 &&
+								resolvedConfig.type.selected === 'ms_sql_server'
+							) {
+								// @ts-ignore
+								datasource.rowCount = value?.[0]?.[0]?.count
+							} else if (resolvedConfig.type.selected === 'snowflake') {
+								// @ts-ignore
+								datasource.rowCount = value?.[0]?.COUNT
+							} else {
+								// @ts-ignore
+								datasource.rowCount = value?.[0]?.count
+							}
+						}
+					},
+					datasource.rowCount
+				)
+			}
+		}
+	}
+
+	async function insert() {
+		try {
+			const selected = resolvedConfig.type.selected
+
+			await insertRowRunnable?.insertRow(
+				resolvedConfig.type.configuration[selected].resource,
+				$workspaceStore,
+				resolvedConfig.type.configuration[selected].table,
+				resolvedConfig.columnDefs,
+				args,
+				selected
+			)
+
+			insertDrawer?.closeDrawer()
+			renderCount++
+		} catch (e) {
+			sendUserToast(e.message, true)
+		}
+
+		args = {}
+	}
+
+	let runnableComponent: RunnableComponent
+	let state: any = undefined
+	let insertRowRunnable: InsertRowRunnable
+	let deleteRow: DeleteRow
+	let dbExplorerCount: DbExplorerCount | undefined = undefined
+
+	function onDelete(e) {
+		const data = { ...e.detail }
+		delete data['__index']
+
+		const selected = resolvedConfig.type.selected
+
+		deleteRow?.triggerDelete(
+			resolvedConfig.type.configuration[selected].resource,
+			resolvedConfig.type.configuration[selected].table ?? 'unknown',
+			resolvedConfig.columnDefs,
+			data,
+			selected
+		)
+	}
+
+	let refreshCount = 0
+
+	$: hideSearch = resolvedConfig.hideSearch as boolean
+	$: hideInsert = resolvedConfig.hideInsert as boolean
+
+	let loading: boolean = false
+</script>
+
+{#each Object.keys(components['dbexplorercomponent'].initialData.configuration) as key (key)}
+	<ResolveConfig
+		{id}
+		extraKey="db_explorer"
+		{key}
+		bind:resolvedConfig={resolvedConfig[key]}
+		configuration={configuration[key]}
+	/>
+{/each}
+
+<InsertRowRunnable
+	on:insert={() => {
+		aggrid?.clearRows()
+		refreshCount++
+	}}
+	{id}
+	bind:this={insertRowRunnable}
+/>
+{#if resolvedConfig.allowDelete}
+	<DeleteRow
+		on:deleted={() => {
+			aggrid?.clearRows()
+			refreshCount++
+		}}
+		{id}
+		bind:this={deleteRow}
+	/>
+{/if}
+
+<UpdateCell {id} bind:this={updateCell} />
+{#if render}
+	<DbExplorerCount
+		bind:this={dbExplorerCount}
+		renderCount={refreshCount}
+		{id}
+		{quicksearch}
+		{table}
+		resource={resolvedConfig?.type?.configuration?.[resolvedConfig?.type?.selected]?.resource}
+		resourceType={resolvedConfig?.type?.selected}
+		columnDefs={resolvedConfig?.columnDefs}
+		whereClause={resolvedConfig?.whereClause}
+	/>
+{/if}
+
+<InitializeComponent {id} />
+
+<RunnableWrapper
+	allowConcurentRequests
+	noInitialize
+	bind:runnableComponent
+	componentInput={input}
+	autoRefresh={false}
+	bind:loading
+	{render}
+	{id}
+	{outputs}
+	overrideCallback={() =>
+		new CancelablePromise(async (resolve) => {
+			await dbExplorerCount?.computeCount(true)
+
+			aggrid?.clearRows()
+			resolve()
+		})}
+	overrideAutoRefresh={true}
+>
+	<div class="h-full" bind:clientHeight={componentContainerHeight}>
+		{#if !(hideSearch === true && hideInsert === true)}
+			<div class="flex py-2 h-12 justify-between gap-4" bind:clientHeight={buttonContainerHeight}>
+				{#if hideSearch !== true}
+					<DebouncedInput
+						class="w-full max-w-[300px]"
+						type="text"
+						bind:value={quicksearch}
+						placeholder="Search..."
+					/>
+				{/if}
+				<div class="flex flex-row gap-2">
+					<RefreshButton {id} {loading} />
+					{#if hideInsert !== true}
+						<Button
+							startIcon={{ icon: Plus }}
+							color="dark"
+							size="xs2"
+							on:click={() => {
+								args = {}
+								insertDrawer?.openDrawer()
+							}}
+						>
+							Insert
+						</Button>
+					{/if}
+				</div>
+			</div>
+		{/if}
+		{#if resolvedConfig.type.configuration?.[resolvedConfig?.type?.selected]?.resource && resolvedConfig.type.configuration?.[resolvedConfig?.type?.selected]?.table}
+			<!-- {JSON.stringify(lastInput)} -->
+			<!-- <span class="text-xs">{JSON.stringify(configuration.columnDefs)}</span> -->
+			{#key renderCount && render}
+				<!-- {JSON.stringify(resolvedConfig.columnDefs)} -->
+				<AppAggridExplorerTable
+					bind:this={aggrid}
+					bind:state
+					{id}
+					{datasource}
+					{resolvedConfig}
+					{customCss}
+					{outputs}
+					allowDelete={resolvedConfig.allowDelete ?? false}
+					containerHeight={componentContainerHeight - (buttonContainerHeight ?? 0)}
+					on:update={onUpdate}
+					on:delete={onDelete}
+					allowColumnDefsActions={false}
+					{actions}
+				/>
+			{/key}
+		{/if}
+	</div>
+</RunnableWrapper>
+<Portal>
+	<Drawer bind:this={insertDrawer} size="800px">
+		<DrawerContent title="Insert row" on:close={insertDrawer.closeDrawer}>
+			<svelte:fragment slot="actions">
+				<Button color="dark" size="xs" on:click={insert} disabled={!isInsertable}>Insert</Button>
+			</svelte:fragment>
+
+			<InsertRow
+				bind:args
+				bind:isInsertable
+				columnDefs={resolvedConfig.columnDefs}
+				dbType={resolvedConfig.type.selected}
+			/>
+		</DrawerContent>
+	</Drawer>
+</Portal>

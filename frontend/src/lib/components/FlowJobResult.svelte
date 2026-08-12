@@ -1,0 +1,72 @@
+<script lang="ts">
+	import { Loader2 } from 'lucide-svelte'
+	import DisplayResult from './DisplayResult.svelte'
+	import LogViewer from './LogViewer.svelte'
+	import { JobService } from '$lib/gen'
+	import { workspaceStore } from '$lib/stores'
+
+	export let result: any
+	export let logs: string | undefined
+	export let col: boolean = false
+	export let noBorder = false
+	export let loading: boolean
+	export let filename: string | undefined = undefined
+	export let jobId: string | undefined = undefined
+	export let workspaceId: string | undefined = undefined
+	export let refreshLog: boolean = false
+
+	let lastJobId: string | undefined = undefined
+
+	$: jobId != lastJobId && diffJobId()
+
+	async function diffJobId() {
+		if (jobId != lastJobId) {
+			lastJobId = jobId
+			logs = undefined
+			logOffset = 0
+			getLogs()
+		}
+	}
+
+	let logOffset = 0
+	async function getLogs() {
+		if (jobId) {
+			const getUpdate = await JobService.getJobUpdates({
+				workspace: workspaceId ?? $workspaceStore!,
+				id: jobId,
+				running: loading ?? false,
+				logOffset: logOffset == 0 ? (logs?.length ? logs?.length + 1 : 0) : logOffset
+			})
+			logs = (logs ?? '').concat(getUpdate.new_logs ?? '')
+			logOffset = getUpdate.log_offset ?? 0
+		}
+		if (refreshLog) {
+			setTimeout(() => {
+				if (refreshLog) {
+					getLogs()
+				}
+			}, 1000)
+		}
+	}
+</script>
+
+<div
+	class:border={!noBorder}
+	class="grid {!col
+		? 'grid-cols-2'
+		: 'grid-rows-2'} shadow border border-tertiary-inverse h-full max-h-[70vh]"
+>
+	<div class="bg-surface {col ? '' : 'max-h-80'} h-full p-1 overflow-auto relative">
+		<span class="text-tertiary">Result</span>
+		{#if result !== undefined}
+			<DisplayResult {workspaceId} {jobId} {filename} {result} />
+		{:else if loading}
+			<Loader2 class="animate-spin" />
+		{:else}
+			<div class="text-gray-400">No result (result is undefined)</div>
+		{/if}
+	</div>
+	<div class="overflow-auto {col ? '' : 'max-h-80'} h-full relative">
+		<LogViewer content={logs ?? ''} {jobId} isLoading={false} tag={undefined} />
+	</div>
+</div>

@@ -1,0 +1,90 @@
+[package]
+name = "windmill-worker"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+name = "windmill_worker"
+path = "src/lib.rs"
+
+[features]
+default = []
+prometheus = ["dep:prometheus", "windmill-common/prometheus"]
+enterprise = ["windmill-queue/enterprise", "windmill-git-sync/enterprise", "windmill-common/enterprise", "dep:gcp_auth", "dep:jsonwebtoken", "dep:pem", "dep:sha2", "dep:tiberius", "dep:tokio-util", "dep:openidconnect"]
+benchmark = ["windmill-queue/benchmark"]
+flamegraph = []
+parquet = ["windmill-common/parquet", "dep:object_store", "dep:tar"]
+flow_testing = []
+
+[dependencies]
+windmill-queue.workspace = true
+windmill-audit.workspace = true # there isn't really a reason for audit-worth actions to happen in the worker.
+windmill-common = { workspace = true, default-features = false }
+windmill-parser.workspace = true
+windmill-parser-ts.workspace = true
+windmill-parser-go.workspace = true
+windmill-parser-py.workspace = true
+windmill-parser-py-imports.workspace = true
+windmill-parser-bash.workspace = true
+windmill-parser-sql.workspace = true
+windmill-parser-graphql.workspace = true
+windmill-git-sync.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures.workspace = true
+async-recursion.workspace = true
+anyhow.workspace = true
+itertools.workspace = true
+regex.workspace = true
+prometheus = { workspace = true, optional = true }
+lazy_static.workspace = true
+chrono.workspace = true
+dotenv.workspace = true
+rand.workspace = true # TODO: Remove. only used by token creation hack.
+const_format.workspace = true
+git-version.workspace = true
+dyn-iter.workspace = true
+once_cell.workspace = true
+rsmq_async.workspace = true
+tokio-postgres.workspace = true
+bit-vec.workspace = true
+deno_fetch.workspace = true
+deno_webidl.workspace = true
+deno_web.workspace = true
+deno_console.workspace = true
+deno_url.workspace = true
+deno_core.workspace = true
+deno_ast.workspace = true
+deno_tls.workspace = true
+postgres-native-tls.workspace = true
+native-tls.workspace = true
+mysql_async.workspace = true
+base64.workspace = true
+gcp_auth = { workspace = true, optional = true }
+rust_decimal.workspace = true
+jsonwebtoken = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+pem = { workspace = true, optional = true }
+urlencoding.workspace = true
+nix.workspace = true
+bytes.workspace = true
+reqwest.workspace = true
+hex.workspace = true
+tiberius = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
+openidconnect = { workspace = true, optional = true}
+tar = { workspace = true, optional = true}
+object_store = { workspace = true, optional = true}
+
+[build-dependencies]
+deno_fetch.workspace = true
+deno_webidl.workspace = true
+deno_web.workspace = true
+deno_console.workspace = true
+deno_url.workspace = true
+deno_core.workspace = true
