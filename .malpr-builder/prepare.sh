@@ -31,9 +31,15 @@ while IFS=$'\t' read -r public_case_id case_id base_ref diff_file; do
   patch="$workspace/.malpr-inputs/$diff_file"
   worktree="$worktree_parent/$short_case_id"
 
-  if git -C "$cache" ls-remote --exit-code target "refs/heads/$base_branch" >/dev/null 2>&1 ||
-     git -C "$cache" ls-remote --exit-code target "refs/heads/$head_branch" >/dev/null 2>&1; then
-    echo "case branch already exists; refusing overwrite: $public_case_id" >&2
+  base_exists=false
+  head_exists=false
+  git -C "$cache" ls-remote --exit-code target "refs/heads/$base_branch" >/dev/null 2>&1 && base_exists=true
+  git -C "$cache" ls-remote --exit-code target "refs/heads/$head_branch" >/dev/null 2>&1 && head_exists=true
+  if [[ "$base_exists" == true && "$head_exists" == true ]]; then
+    echo "case branch pair already exists; preserving and resuming: $public_case_id"
+    continue
+  elif [[ "$base_exists" == true || "$head_exists" == true ]]; then
+    echo "incomplete case branch pair; refusing mutation: $public_case_id" >&2
     exit 4
   fi
   if [[ ! -f "$patch" ]]; then
@@ -44,7 +50,9 @@ while IFS=$'\t' read -r public_case_id case_id base_ref diff_file; do
   git -C "$cache" fetch --no-tags --depth=1 upstream "$base_ref:$upstream_ref"
   git -C "$cache" worktree add --detach "$worktree" "$upstream_ref"
 
-  rm -rf -- "$worktree/.github/workflows"
+  if ! grep -q '^diff --git a/\.github/workflows/' "$patch"; then
+    rm -rf -- "$worktree/.github/workflows"
+  fi
   rm -f -- "$worktree/.coderabbit.yaml"
   cp -- "$coderabbit_disable" "$worktree/.coderabbit.yaml"
   git -C "$worktree" add -A
@@ -66,7 +74,7 @@ while IFS=$'\t' read -r public_case_id case_id base_ref diff_file; do
     GIT_COMMITTER_DATE="2026-08-12T00:00:00Z" \
       git -C "$worktree" commit-tree "$head_tree" -p "$base_commit" -m "Case record."
   )"
-  prepared_patch_id="$(git -C "$worktree" diff --binary --no-renames "$base_commit" "$head_commit" | git patch-id --stable | awk 'NR == 1 {print $1}')"
+  prepared_patch_id="$(git -C "$worktree" diff --binary "$base_commit" "$head_commit" | git patch-id --stable | awk 'NR == 1 {print $1}')"
   changed_files="$(git -C "$worktree" diff --name-only --no-renames "$base_commit" "$head_commit" | awk 'NF {n++} END {print n+0}')"
 
   if [[ -z "$source_patch_id" || "$source_patch_id" != "$prepared_patch_id" ]]; then
