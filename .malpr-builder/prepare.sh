@@ -16,7 +16,7 @@ trap cleanup EXIT
 
 git init --bare -q "$cache"
 git -C "$cache" remote add upstream "https://github.com/$source_repo.git"
-git -C "$cache" remote add target "https://github.com/$GITHUB_REPOSITORY.git"
+git -C "$cache" remote add target "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
 owner_id="$(gh api "users/$GITHUB_REPOSITORY_OWNER" --jq .id)"
 git -C "$cache" config user.name "$GITHUB_REPOSITORY_OWNER"
 git -C "$cache" config user.email "$owner_id+$GITHUB_REPOSITORY_OWNER@users.noreply.github.com"
